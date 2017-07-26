@@ -11,6 +11,7 @@ A the moment, the following vulnerabilities are present:
 * Python code injection
 * Operating System command injection
 * Python deserialisation of arbitrary data (pickle)
+* XXE injection
 
 
 New vulnerabilities may be added from time to time as I have need of them.
