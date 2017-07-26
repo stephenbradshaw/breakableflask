@@ -5,6 +5,8 @@ import os
 import pickle
 from base64 import b64decode,b64encode
 from os import popen
+from lxml import etree
+import cgi
 
 from flask import Flask, request, make_response
 
@@ -26,6 +28,7 @@ def index():
         <a href="/cookie">Set and get cookie value</a><br>
         <a href="/lookup">Do DNS lookup on address</a><br>
         <a href="/evaluate">Evaluate expression</a><br>
+        <a href="/xml">Parse XML</a><br>
     </body>
     </html>
     """
@@ -101,6 +104,31 @@ def cookie():
         resp.set_cookie('value', b64encode(pickle.dumps(value)))
 
     return resp
+
+
+# xml external entities and DTD
+@app.route('/xml', methods = ['POST', 'GET'])
+def xml():
+    parsed_xml = None
+    if request.method == 'POST':
+        xml = request.form['xml']
+        parser = etree.XMLParser(no_network=False, dtd_validation=True)
+        try:
+            doc = etree.fromstring(str(xml), parser)
+            parsed_xml = etree.tostring(doc)
+        except:
+           pass
+    return """
+    <html>
+       <body>""" + "Result:\n<br>\n" + cgi.escape(parsed_xml)  if parsed_xml else "" + """
+          <form action = "/xml" method = "POST">
+             <p><h3>Enter xml to parse</h3></p>
+             <textarea class="input" name="xml" cols="40" rows="5"></textarea>
+             <p><input type = 'submit' value = 'Parse'/></p>
+          </form>
+       </body>
+    </html>
+    """
 
 
 app.run('localhost', 4000, app)
