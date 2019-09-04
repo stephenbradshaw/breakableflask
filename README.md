@@ -1,4 +1,4 @@
-Breakable Flask
+# Breakable Flask
 
 
 A simple vulnerable Flask application.
@@ -12,6 +12,7 @@ A the moment, the following vulnerabilities are present:
 * Operating System command injection
 * Python deserialisation of arbitrary data (pickle)
 * XXE injection
+* Padding oracle
 
 
 New vulnerabilities may be added from time to time as I have need of them.
