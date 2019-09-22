@@ -11,7 +11,8 @@ import cgi
 from Crypto.Cipher import AES
 from Crypto import Random
 
-from flask import Flask, request, make_response
+
+from flask import Flask, request, make_response, render_template_string
 
 
 app = Flask(__name__)
@@ -80,6 +81,7 @@ def index():
         <a href="/evaluate">Evaluate expression</a><br>
         <a href="/xml">Parse XML</a><br>
         <a href="/config">View some config items</a><br>
+        <a href="/sayhi">Receive a personalised greeting</a><br>
     </body>
     </html>
     """
@@ -212,6 +214,29 @@ def config():
       </body>
     </html>
     """
+
+
+# server side template injection
+@app.route('/sayhi', methods = ['POST', 'GET'])
+def sayhi():
+   name = ''
+   if request.method == 'POST':
+      name = '<br>Hello %s!<br><br>' %(request.form['name'])
+
+   template = """
+   <html>
+      <body>
+         <form action = "/sayhi" method = "POST">
+            <p><h3>What is your name?</h3></p>
+            <p><input type = 'text' name = 'name'/></p>
+            <p><input type = 'submit' value = 'Submit'/></p>
+         </form>
+      %s
+      </body>
+   </html>
+   """ %(name)
+   return render_template_string(template)
+
 
 
 app.run('localhost', 4000, app)
