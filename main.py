@@ -1,6 +1,4 @@
 #!/usr/bin/env python
-
-import ssl
 import os
 import pickle
 from base64 import b64decode,b64encode
@@ -238,6 +236,6 @@ def sayhi():
    return render_template_string(template)
 
 
-
-app.run('localhost', 4000, app)
+if __name__ == "__main__":
+   app.run(host='localhost', port=4000)
 
