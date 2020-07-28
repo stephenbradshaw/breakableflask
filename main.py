@@ -1,11 +1,11 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import os
 import pickle
 from base64 import b64decode,b64encode
 from binascii import hexlify, unhexlify
 from os import popen
 from lxml import etree
-import cgi
+import html
 from Crypto.Cipher import AES
 from Crypto import Random
 
@@ -33,33 +33,34 @@ CONFIG = {
 
 
 def unpad(value, bs=BLOCKSIZE):
-   pv = ord(value[-1])
-   if pv > bs:
-      raise Exception('Bad padding')
-   padding = value[-pv:]
-   if len(padding) != pv or len(set([a for a in padding])) != 1:
-      raise Exception('Bad padding')
-   return value[:-pv]
+    #pv = ord(value[-1])
+    pv = value[-1]
+    if pv > bs:
+        raise Exception('Bad padding')
+    padding = value[-pv:]
+    if len(padding) != pv or len(set([a for a in padding])) != 1:
+        raise Exception('Bad padding')
+    return value[:-pv]
 
 
 def pad(value, bs=BLOCKSIZE):
-   pv = bs - (len(value) % bs)
-   return value + chr(pv) * pv
+    pv = bs - (len(value) % bs)
+    return value + (chr(pv) * pv).encode()
 
 
 def encrypt(value, key):
-   iv = Random.new().read(BLOCKSIZE)
-   cipher = AES.new(key, AES.MODE_CBC, iv)
-   padded_value = pad(value)
-   return iv + cipher.encrypt(padded_value)
+    iv = Random.new().read(BLOCKSIZE)
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    padded_value = pad(value)
+    return iv + cipher.encrypt(padded_value)
 
 
 def decrypt(value, key):
-   iv = value[:BLOCKSIZE]
-   decrypt_value = value[BLOCKSIZE:]
-   cipher = AES.new(key, AES.MODE_CBC, iv)
-   decrypted = cipher.decrypt(decrypt_value)
-   return unpad(decrypted)
+    iv = value[:BLOCKSIZE]
+    decrypt_value = value[BLOCKSIZE:]
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    decrypted = cipher.decrypt(decrypt_value)
+    return unpad(decrypted)
 
 
 
@@ -163,23 +164,24 @@ def xml():
     parsed_xml = None
     if request.method == 'POST':
         xml = request.form['xml']
-        parser = etree.XMLParser(no_network=False, dtd_validation=True)
+        parser = etree.XMLParser(no_network=False, dtd_validation=False, load_dtd=True)
         try:
-            doc = etree.fromstring(str(xml), parser)
-            parsed_xml = etree.tostring(doc)
+            doc = etree.fromstring(xml.encode(), parser)
+            parsed_xml = etree.tostring(doc).decode('utf8')
         except:
-           pass
+            pass
     return """
-    <html>
-       <body>""" + "Result:\n<br>\n" + cgi.escape(parsed_xml)  if parsed_xml else "" + """
-          <form action = "/xml" method = "POST">
-             <p><h3>Enter xml to parse</h3></p>
-             <textarea class="input" name="xml" cols="40" rows="5"></textarea>
-             <p><input type = 'submit' value = 'Parse'/></p>
-          </form>
-       </body>
-    </html>
-    """
+       <html>
+          <body>""" + "Result:\n<br>\n" + html.escape(parsed_xml) if parsed_xml else "" + """
+             <form action = "/xml" method = "POST">
+                <p><h3>Enter xml to parse</h3></p>
+                <textarea class="input" name="xml" cols="40" rows="5"></textarea>
+                <p><input type = 'submit' value = 'Parse'/></p>
+             </form>
+          </body>
+       </html>
+       """
+
 
 # padding oracle
 @app.route('/config', methods = ['GET'])
@@ -189,14 +191,14 @@ def config():
     decrypted_key = None
     key = request.args.get('key')
     viewable = [a for a in CONFIG.keys() if a.startswith('app_')]
-    crypt = lambda x : hexlify(encrypt(x, KEY))
+    crypt = lambda x : hexlify(encrypt(x.encode(), KEY)).decode('utf8')
     configs = '\n'.join(['<a href="/config?key=%s">%s</a><br>' %(crypt(a), a ) for a in viewable])
     unviewable = [a for a in CONFIG.keys() if not a.startswith('app_')]
     nconfigs = '\n'.join(['%s - Not Viewable<br>' %(a) for a in unviewable])
     if key:
         try:
             kv = unhexlify(key)
-            decrypted_key = str(decrypt(kv, KEY))
+            decrypted_key = decrypt(kv, KEY).decode('utf8')
         except Exception as e:
             return str(e)
         
@@ -208,7 +210,7 @@ def config():
       <body>
          <p><h3>Select config value to view</h3></p>
         """ + configs + "\n" + nconfigs + """
-        """ + ('\n<br><br>Config value:<br><b>' + str(decrypted_key) + '</b>: <i>' + str(config_out) + '</i><br>\n' if decrypted_key else '') + """
+        """ + ('\n<br><br>Config value:<br><b>' + decrypted_key + '</b>: <i>' + config_out + '</i><br>\n' if decrypted_key else '') + """
       </body>
     </html>
     """
@@ -237,5 +239,5 @@ def sayhi():
 
 
 if __name__ == "__main__":
-   app.run(host='localhost', port=4000)
+    app.run(host='localhost', port=4000)
 

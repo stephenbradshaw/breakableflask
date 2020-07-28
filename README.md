@@ -13,6 +13,7 @@ A the moment, the following vulnerabilities are present:
 * Python deserialisation of arbitrary data (pickle)
 * XXE injection
 * Padding oracle
+* Server side template injection
 
 
 New vulnerabilities may be added from time to time as I have need of them.
