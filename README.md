@@ -17,3 +17,15 @@ A the moment, the following vulnerabilities are present:
 
 
 New vulnerabilities may be added from time to time as I have need of them.
+
+Prerequisite : 
+Python3
+
+How to install & execute it ?  
+
+`pip install -r requirements.txt`
+`python main.py`
+
+
+
+
