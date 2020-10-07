@@ -4,5 +4,5 @@ itsdangerous>=1.1.0
 Jinja2>=2.11.2
 lxml>=4.5.2
 MarkupSafe>=1.1.1
-pycrypto>=2.6.1
+pycryptodome==3.9.8
 Werkzeug>=1.0.1
