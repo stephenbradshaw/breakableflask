@@ -164,12 +164,12 @@ def xml():
     parsed_xml = None
     if request.method == 'POST':
         xml = request.form['xml']
-        parser = etree.XMLParser(no_network=False, dtd_validation=False, load_dtd=True)
-        try:
-            doc = etree.fromstring(xml.encode(), parser)
-            parsed_xml = etree.tostring(doc).decode('utf8')
-        except:
-            pass
+        parser = etree.XMLParser(no_network=False, dtd_validation=False, load_dtd=True, huge_tree=True)
+        #try:
+        doc = etree.fromstring(xml.encode(), parser)
+        parsed_xml = etree.tostring(doc).decode('utf8')
+        #except:
+            #pass
     return """
        <html>
           <body>""" + "Result:\n<br>\n" + html.escape(parsed_xml) if parsed_xml else "" + """

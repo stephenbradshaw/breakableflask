@@ -5,9 +5,9 @@ A simple vulnerable Flask application.
 
 This can be used to test out and learn exploitation of common web application vulnerabilities. 
 
-Originally written because I wanted a very simple, single page vulnerable app that I could quickly run up to perform exploitation checks against. 
+Originally written because I wanted a very simple, single file vulnerable app that I could quickly run up to perform exploitation checks against. 
 
-A the moment, the following vulnerabilities are present:
+At the moment, the following vulnerabilities are present:
 * Python code injection
 * Operating System command injection
 * Python deserialisation of arbitrary data (pickle)
@@ -17,3 +17,9 @@ A the moment, the following vulnerabilities are present:
 
 
 New vulnerabilities may be added from time to time as I have need of them.
+
+Theres a "requirements.txt" file included so you can install the required Python modules. The code has recently been updated for Python3.
+
+Install using:
+
+    pip install -r requirements.txt
