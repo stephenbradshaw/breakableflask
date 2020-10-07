@@ -68,6 +68,7 @@ def rp(command):
     return popen(command).read()
 
 
+# Main index
 @app.route('/')
 def index():
     return """
@@ -86,47 +87,7 @@ def index():
     """
 
 
-# code injection
-@app.route('/evaluate', methods = ['POST', 'GET'])
-def evaluate():
-    expression = None
-    if request.method == 'POST':
-        expression = request.form['expression']
-    return """
-    <html>
-       <body>""" + "Result: " + (str(eval(expression)).replace('\n', '\n<br>')  if expression else "") + """
-          <form action = "/evaluate" method = "POST">
-             <p><h3>Enter expression to evaluate</h3></p>
-             <p><input type = 'text' name = 'expression'/></p>
-             <p><input type = 'submit' value = 'Evaluate'/></p>
-          </form>
-       </body>
-    </html>
-    """
-
-
-
-# os command injection
-@app.route('/lookup', methods = ['POST', 'GET'])
-def lookup():
-    address = None
-    if request.method == 'POST':
-        address = request.form['address']
-    return """
-    <html>
-       <body>""" + "Result:\n<br>\n" + (rp("nslookup " + address).replace('\n', '\n<br>')  if address else "") + """
-          <form action = "/lookup" method = "POST">
-             <p><h3>Enter address to lookup</h3></p>
-             <p><input type = 'text' name = 'address'/></p>
-             <p><input type = 'submit' value = 'Lookup'/></p>
-          </form>
-       </body>
-    </html>
-    """
-
-    
-
-# deserialisation vulnerability
+# 1. Cookie setter/getter
 @app.route('/cookie', methods = ['POST', 'GET'])
 def cookie():
     cookieValue = None
@@ -158,7 +119,47 @@ def cookie():
     return resp
 
 
-# xml external entities and DTD
+
+# 2. DNS lookup
+@app.route('/lookup', methods = ['POST', 'GET'])
+def lookup():
+    address = None
+    if request.method == 'POST':
+        address = request.form['address']
+    return """
+    <html>
+       <body>""" + "Result:\n<br>\n" + (rp("nslookup " + address).replace('\n', '\n<br>')  if address else "") + """
+          <form action = "/lookup" method = "POST">
+             <p><h3>Enter address to lookup</h3></p>
+             <p><input type = 'text' name = 'address'/></p>
+             <p><input type = 'submit' value = 'Lookup'/></p>
+          </form>
+       </body>
+    </html>
+    """
+
+    
+# 3. Python expression evaluation
+@app.route('/evaluate', methods = ['POST', 'GET'])
+def evaluate():
+    expression = None
+    if request.method == 'POST':
+        expression = request.form['expression']
+    return """
+    <html>
+       <body>""" + "Result: " + (str(eval(expression)).replace('\n', '\n<br>')  if expression else "") + """
+          <form action = "/evaluate" method = "POST">
+             <p><h3>Enter expression to evaluate</h3></p>
+             <p><input type = 'text' name = 'expression'/></p>
+             <p><input type = 'submit' value = 'Evaluate'/></p>
+          </form>
+       </body>
+    </html>
+    """
+
+
+
+# 4. XML Parser
 @app.route('/xml', methods = ['POST', 'GET'])
 def xml():
     parsed_xml = None
@@ -183,7 +184,7 @@ def xml():
        """
 
 
-# padding oracle
+# 5. View application configuration settings 
 @app.route('/config', methods = ['GET'])
 def config():
     key = None
@@ -216,7 +217,7 @@ def config():
     """
 
 
-# server side template injection
+# 6. Receive personalised greeting
 @app.route('/sayhi', methods = ['POST', 'GET'])
 def sayhi():
    name = ''

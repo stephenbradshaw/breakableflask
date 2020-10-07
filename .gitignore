@@ -1,0 +1,2 @@
+# Dont upload temporary Markdown writeups 
+.writeup.md
