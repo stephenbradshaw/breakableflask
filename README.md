@@ -28,33 +28,15 @@ You can install the modules using pip like so:
     pip install -r requirements.txt
 
 
-## Running the server
+## Running breakableflask
 
-If you want to take advantage of the SQL injection vulnerability, you will need to be running an appropriate database server and run the program with options similar to those below:
+Basic exeuction of the program is like so, this runs the web server at the default location of `http://127.0.0.1:4000` without connection to a database server for the SQL injection vulnerability.
 
+    ./main.py
 
-    /main.py --database_type=postgres --database_user='postgres' --database_pass=password --database_host=127.0.0.1 --database_port=5432
+If you want to take advantage of the SQL injection vulnerability, you will need to run the program with database connection options. The full list of options can be found by running the program with the `--help` option, but as example, here is how you could connect to a PostgreSQL server:
 
+    ./main.py --database_type=postgres --database_user='postgres' --database_pass=password --database_host=127.0.0.1 --database_port=5432
 
-Otherwise run like so to do without SQL injection (and without the database server requirement):
+Breakableflask will attempt to populate the database server with the needed data to provide the SQL injection test bed. You can see the included `docker_database_setup.md` file for instructions on easily running various supported database engines using Docker. 
 
-    /main.py
-
-
-The server will start at `http://127.0.0.1:4000`. There is a help option `--help` to see supported options, which will allow you to change bind details, etc.
-
-
-If youre using the database, on initial run the server will populate it with some data.
-
-
-## Run the database server using docker
-
-
-You can use docker to create a suitable postgres server like so
-
-    docker run -d --name postgres -e POSTGRES_PASSWORD=password -p 5432:5432 postgres
-
-
-Use the following to run the server after the initial launch. 
-
-    docker start postgres

@@ -332,29 +332,57 @@ if __name__ == "__main__":
     parser.add_argument('--database_user', type=str, help='Database username. Default: None', default=None)
     parser.add_argument('--database_password', type=str, help='Database username.  Default: None', default=None)
     parser.add_argument('--database_host', type=str, help='Database hostname. Default: None', default=None)
-    parser.add_argument('--database_port', type=str, help='Database port. Default: None', default=None)
+    parser.add_argument('--database_port', type=int, help='Database port. Default: None', default=None)
     parser.add_argument('--database_filename', type=str, help='Database filename (sqlite only). Default: None', default=None)
 
 
     args = parser.parse_args()
 
 
+    if args.database_type in ['mysql', 'mssql']:
+        autocommit = lambda x : x.autocommit(True)
+        args.database_filename = None
     if args.database_type == 'postgres':
-        import psycopg2
+        import psycopg2 as dbmodule
+        def autocommit(x):
+            x.autocommit = True
+        args.database_filename = None
+        list_databases_query = 'SELECT datname FROM pg_database;'
+        list_tables_query = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;"
+        if args.database_port: 
+            args.database_port = str(args.database_port) # check if this is necessary
+    if args.database_type == 'mysql':
+        import pymysql as dbmodule
+        list_databases_query = 'SHOW databases;'
+        list_tables_query = 'SHOW tables;'
+    if args.database_type == 'mssql':
+        print('Warning, mssql support is not fully tested as yet')
+        import pymssql as dbmodule
+        list_databases_query = 'SELECT name FROM sys.databases;'
+        list_tables_query = 'SELECT name FROM sys.tables;' # need to confirm this is correct
+    if args.database_type in ['oracle', 'sqlite']:
+        print('Support for these database types is planned but not yet implemented.')
+        sys.exit(1)
+
+    if 'autocommit' in globals():
         try:
-            connection = psycopg2.connect(user = args.database_user, password = args.database_password, host = args.database_host, port = args.database_port)
-            connection.autocommit = True
+            args.database_type = None
+            connection_params = {a.replace('database_', ''): getattr(args, a) for a in dir(args) if a.startswith('database_') and getattr(args, a) }
+            connection = dbmodule.connect(**connection_params)
+            autocommit(connection)
             cursor = connection.cursor()
-            cursor.execute("SELECT datname FROM pg_database where datname='{}';".format(DATABASE_NAME))
-            r = cursor.fetchone()
+            cursor.execute(list_databases_query)
+            r = [a[0] for a in cursor.fetchall() if a[0] == DATABASE_NAME]
             if not r:
                 # create database
                 cursor.execute("CREATE DATABASE {};".format(DATABASE_NAME))
-            connection = psycopg2.connect(user = args.database_user, password = args.database_password, host = args.database_host, port = args.database_port, database = DATABASE_NAME)
             
-            connection.autocommit = True
+            connection_params['database'] = DATABASE_NAME
+            connection = dbmodule.connect(**connection_params)
+            autocommit(connection)
+
             cursor = connection.cursor()
-            cursor.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;")
+            cursor.execute(list_tables_query)
             existing_tables = [a[0] for a in cursor.fetchall()]
             # create tables
             for table in [a for a in DATABASE_TABLES if a['table_name'] not in existing_tables]:
@@ -369,10 +397,7 @@ if __name__ == "__main__":
         except Exception as e:
             print(e)
             sys.exit(1)
-    elif args.database_type in ['oracle', 'mysql', 'mssql', 'sqlite']:
-        print('Support for these database types is planned but not yet implemented.')
-        sys.exit(1)
-    
+
 
 
     if database:
