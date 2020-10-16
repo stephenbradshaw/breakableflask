@@ -8,12 +8,11 @@ from lxml import etree
 import html
 from Crypto.Cipher import AES
 from Crypto import Random
+import argparse
+import sys
 
 
 from flask import Flask, request, make_response, render_template_string
-
-
-app = Flask(__name__)
 
 # Config stuff
 KEY=Random.new().read(32) # 256 bit key for extra security!!!
@@ -30,6 +29,46 @@ CONFIG = {
     'app_version' : APP_VERSION,
     'app_philosophy' : APP_PHILOSOPHY
 }
+
+DATABASE_NAME = 'breakdb'
+
+DATABASE_TABLES = [
+    {
+        'table_name' : 'public_stuff',
+        'columns': [
+            {'name' : 'id', 'datatype' : 'integer', 'nullable': False},
+            {'name' : 'name', 'datatype' : 'varchar(40)', 'nullable': True},
+            {'name' : 'category', 'datatype' : 'varchar(20)', 'nullable': False},
+            {'name' : 'description', 'datatype' : 'varchar(400)', 'nullable': True}
+        ]
+    },
+    {
+        'table_name' : 'secret_stuff',
+        'columns' : [
+            {'name' : 'name', 'datatype' : 'varchar(40)', 'nullable': True},
+            {'name' : 'description', 'datatype' : 'varchar(400)', 'nullable': True}
+        ]
+    }
+]
+
+# table columns must be specified in DATABASE_TABLES structure with column names in the list in the same order as below
+DATABASE_CONTENTS = {
+    'public_stuff' : [
+        (1, 'Military grade encryption', 'products', 'Dont let your data be compromised, use our patented exabit encryption technology that secures your data so well even you cant read it'),
+        (2, 'Advanced APT Detection', 'products', 'Fully next-gen big-data backed threat analysis with extra AI that detects TTPs, C2s, Malwares and SIEMs'),
+        (3, 'Internet of things', 'whitepapers', 'Check out our cyber strategies to survive the next cyber fight on the new cyber battleground in the ongoing cyber war'),
+        (4, 'Enterprise version', 'solutions', 'Our most cost efficient solution for all your cyber concerns featuring the best value for money, the most effective breaking of the kill chain and the greatest ROI'),
+        (5, 'Zero trust network', 'whitepapers', 'Secure your network from those with nefarious intent, like cyber criminals, cyber spies, cyber hackers and your own internal staff'),
+    ],
+    'secret_stuff' : [
+        ('My first secret', 'None of these things actually work'),
+        ('Second secret', 'Our DLP product is a single regex'),
+        ('Secret three', 'Its too secret to even include here')
+    ]
+}
+
+
+database = False
 
 
 def unpad(value, bs=BLOCKSIZE):
@@ -63,14 +102,19 @@ def decrypt(value, key):
     return unpad(decrypted)
 
 
-
 def rp(command):
     return popen(command).read()
 
 
+app = Flask(__name__)
+
 # Main index
 @app.route('/')
 def index():
+    database_ref = """
+        <a href="/listservices">List our products and services</a><br>
+    """
+
     return """
     <html>
     <head><title>Vulnerable Flask App: """ + CONFIG['app_name'] +"""</title></head>
@@ -82,6 +126,7 @@ def index():
         <a href="/xml">Parse XML</a><br>
         <a href="/config">View some config items</a><br>
         <a href="/sayhi">Receive a personalised greeting</a><br>
+    """ + database_ref if database else  '' + """
     </body>
     </html>
     """
@@ -239,6 +284,99 @@ def sayhi():
    return render_template_string(template)
 
 
+
+
+# 7. List products and services
+#@app.route('/listservices', methods = ['GET'])
+def listservices():
+    param = 'category'
+    category = None
+    category = request.args.get(param)
+    columns = [b['name'] for b in [a for a in DATABASE_TABLES if a['table_name'] == 'public_stuff'][0]['columns']]
+    column_html = '\n'.join(['<th>{}</th>'.format(a) for a in columns])
+    where = ''
+    if category:
+        where = " WHERE {} = '{}'".format(param, category)
+    
+    try:
+        cursor.execute('SELECT * from public_stuff{};'.format(where))
+        results = cursor.fetchall()
+    except Exception as e:
+        return str(e)
+    
+    linker = lambda x,y : '<a href="/listservices?{}={}">{}</a>'.format(param, y, y) if x==columns.index(param) else str(y)
+    results_html = '<tr>\n<td>' + '</tr>\n<tr>\n<td>'.join(['</td>\n<td>'.join([linker(c, b) for b, c in zip(a, range(0,len(a)))]) for a in results]) + '\n</tr>'
+    
+    return """
+    <html>
+        <body>
+        <h1>Products and services</h1><br>
+        <p>See below for our list of products and services. Click on a category to filter results.</p>
+        <br><br>
+        <table>
+        <tr>""" + column_html + """
+        </tr>""" + results_html + """
+        </table>
+        </body>
+    </html>
+    """
+    
+
 if __name__ == "__main__":
-    app.run(host='localhost', port=4000)
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-p', '--port', type=int, help='Listen port. Default: 4000', default=4000)
+    parser.add_argument('-a', '--address', type=str, help='Listen address. Default: 127.0.0.1', default='127.0.0.1')
+    parser.add_argument('-d', help='Debug level', action="count", default=0)
+    parser.add_argument('--database_type', help='Database type. Set to enable database functionality. Default: None', default=None, choices=['postgres', 'oracle', 'mysql', 'mssql', 'sqlite', None])
+    parser.add_argument('--database_user', type=str, help='Database username. Default: None', default=None)
+    parser.add_argument('--database_password', type=str, help='Database username.  Default: None', default=None)
+    parser.add_argument('--database_host', type=str, help='Database hostname. Default: None', default=None)
+    parser.add_argument('--database_port', type=str, help='Database port. Default: None', default=None)
+    parser.add_argument('--database_filename', type=str, help='Database filename (sqlite only). Default: None', default=None)
+
+
+    args = parser.parse_args()
+
+
+    if args.database_type == 'postgres':
+        import psycopg2
+        try:
+            connection = psycopg2.connect(user = args.database_user, password = args.database_password, host = args.database_host, port = args.database_port)
+            connection.autocommit = True
+            cursor = connection.cursor()
+            cursor.execute("SELECT datname FROM pg_database where datname='{}';".format(DATABASE_NAME))
+            r = cursor.fetchone()
+            if not r:
+                # create database
+                cursor.execute("CREATE DATABASE {};".format(DATABASE_NAME))
+            connection = psycopg2.connect(user = args.database_user, password = args.database_password, host = args.database_host, port = args.database_port, database = DATABASE_NAME)
+            
+            connection.autocommit = True
+            cursor = connection.cursor()
+            cursor.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;")
+            existing_tables = [a[0] for a in cursor.fetchall()]
+            # create tables
+            for table in [a for a in DATABASE_TABLES if a['table_name'] not in existing_tables]:
+                inner = ', '.join([' '.join([ (lambda x : x if isinstance(x, str) else 'NULL' if x else 'NOT NULL')(a[b]) for b in ['name', 'datatype', 'nullable'] ]) for a in table['columns'] ])
+                cursor.execute('CREATE TABLE {} ({});'.format(table['table_name'], inner))
+                # insert data into table 
+                for data in DATABASE_CONTENTS[table['table_name']]:
+                    columns = ', '.join([a['name'] for a in table['columns']])
+                    values = ', '.join([(lambda x: str(x) if isinstance(x, int) else "'{}'".format(x.replace("'", "\\'")))(a) for a in data])
+                    cursor.execute('INSERT INTO {} ({}) VALUES ({});'.format(table['table_name'], columns, values))
+            database = True
+        except Exception as e:
+            print(e)
+            sys.exit(1)
+    elif args.database_type in ['oracle', 'mysql', 'mssql', 'sqlite']:
+        print('Support for these database types is planned but not yet implemented.')
+        sys.exit(1)
+    
+
+
+    if database:
+        app.add_url_rule('/listservices','listservices', listservices)
+    
+    app.run(host=args.address, port=args.port)
 
