@@ -30,13 +30,14 @@ You can install the modules using pip like so:
 
 ## Running breakableflask
 
-Basic exeuction of the program is like so, this runs the web server at the default location of `http://127.0.0.1:4000` without connection to a database server for the SQL injection vulnerability.
+Basic execution of the program is like so, this runs the web server at the default location of `http://127.0.0.1:4000`. An in memory instance of sqlite3 will be used to provide SQL injection capabilities.
 
     ./main.py
 
-If you want to take advantage of the SQL injection vulnerability, you will need to run the program with database connection options. The full list of options can be found by running the program with the `--help` option, but as example, here is how you could connect to a PostgreSQL server:
+If you want to use another databse engine for SQL injection, you need to run an external database server and run the application with options to specify the database type and connection details. The full list of options can be found by running the program with the `--help` option, but as an example, here is how you could connect to a PostgreSQL server:
 
-    ./main.py --database_type=postgres --database_user='postgres' --database_pass=password --database_host=127.0.0.1 --database_port=5432
+    ./main.py --database_type=postgres --database_user=postgres --database_password=password --database_host=127.0.0.1 --database_port=5432
 
-Breakableflask will attempt to populate the database server with the needed data to provide the SQL injection test bed. You can see the included `docker_database_setup.md` file for instructions on easily running various supported database engines using Docker. 
+On launch breakableflask will attempt to populate the database server with the needed data to provide the needed SQL functionality. 
 
+Given that one of the reasons for this programs existence is to provide a test bed that is as easy as possible to run, there are included instructions in `docker_database_setup.md` file that will help you easily start up various database types in Docker. 

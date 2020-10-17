@@ -67,10 +67,6 @@ DATABASE_CONTENTS = {
     ]
 }
 
-
-database = False
-
-
 def unpad(value, bs=BLOCKSIZE):
     #pv = ord(value[-1])
     pv = value[-1]
@@ -111,10 +107,6 @@ app = Flask(__name__)
 # Main index
 @app.route('/')
 def index():
-    database_ref = """
-        <a href="/listservices">List our products and services</a><br>
-    """
-
     return """
     <html>
     <head><title>Vulnerable Flask App: """ + CONFIG['app_name'] +"""</title></head>
@@ -126,7 +118,7 @@ def index():
         <a href="/xml">Parse XML</a><br>
         <a href="/config">View some config items</a><br>
         <a href="/sayhi">Receive a personalised greeting</a><br>
-    """ + database_ref if database else  '' + """
+        <a href="/listservices">List our products and services</a><br>
     </body>
     </html>
     """
@@ -284,10 +276,8 @@ def sayhi():
    return render_template_string(template)
 
 
-
-
 # 7. List products and services
-#@app.route('/listservices', methods = ['GET'])
+@app.route('/listservices', methods = ['GET'])
 def listservices():
     param = 'category'
     category = None
@@ -328,80 +318,70 @@ if __name__ == "__main__":
     parser.add_argument('-p', '--port', type=int, help='Listen port. Default: 4000', default=4000)
     parser.add_argument('-a', '--address', type=str, help='Listen address. Default: 127.0.0.1', default='127.0.0.1')
     parser.add_argument('-d', help='Debug level', action="count", default=0)
-    parser.add_argument('--database_type', help='Database type. Set to enable database functionality. Default: None', default=None, choices=['postgres', 'oracle', 'mysql', 'mssql', 'sqlite', None])
+    parser.add_argument('--database_type', help='Database type. Default: sqlite', default='sqlite', choices=['postgres', 'oracle', 'mysql', 'mssql', 'sqlite'])
     parser.add_argument('--database_user', type=str, help='Database username. Default: None', default=None)
     parser.add_argument('--database_password', type=str, help='Database username.  Default: None', default=None)
     parser.add_argument('--database_host', type=str, help='Database hostname. Default: None', default=None)
     parser.add_argument('--database_port', type=int, help='Database port. Default: None', default=None)
-    parser.add_argument('--database_filename', type=str, help='Database filename (sqlite only). Default: None', default=None)
+    parser.add_argument('--database_filename', type=str, help='Database filename (sqlite only). Default: :memory:', default=':memory:')
 
 
     args = parser.parse_args()
 
-
     if args.database_type in ['mysql', 'mssql']:
         autocommit = lambda x : x.autocommit(True)
-        args.database_filename = None
     if args.database_type == 'postgres':
         import psycopg2 as dbmodule
         def autocommit(x):
             x.autocommit = True
-        args.database_filename = None
         list_databases_query = 'SELECT datname FROM pg_database;'
         list_tables_query = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;"
-        if args.database_port: 
-            args.database_port = str(args.database_port) # check if this is necessary
     if args.database_type == 'mysql':
         import pymysql as dbmodule
         list_databases_query = 'SHOW databases;'
         list_tables_query = 'SHOW tables;'
     if args.database_type == 'mssql':
-        print('Warning, mssql support is not fully tested as yet')
         import pymssql as dbmodule
         list_databases_query = 'SELECT name FROM sys.databases;'
-        list_tables_query = 'SELECT name FROM sys.tables;' # need to confirm this is correct
-    if args.database_type in ['oracle', 'sqlite']:
+        list_tables_query = 'SELECT name FROM sys.tables;'
+    if args.database_type == 'sqlite':
+        import sqlite3 as dbmodule
+        list_tables_query = "SELECT name FROM sqlite_master WHERE type ='table' AND name NOT LIKE 'sqlite_%';"
+    if args.database_type in ['oracle']:
         print('Support for these database types is planned but not yet implemented.')
         sys.exit(1)
 
-    if 'autocommit' in globals():
-        try:
-            args.database_type = None
-            connection_params = {a.replace('database_', ''): getattr(args, a) for a in dir(args) if a.startswith('database_') and getattr(args, a) }
+    try:
+        if args.database_type != 'sqlite':
+            connection_params = {a.replace('database_', ''): getattr(args, a) for a in dir(args) if a in ['database_user', 'database_host', 'database_password', 'database_port']}
             connection = dbmodule.connect(**connection_params)
             autocommit(connection)
             cursor = connection.cursor()
             cursor.execute(list_databases_query)
             r = [a[0] for a in cursor.fetchall() if a[0] == DATABASE_NAME]
-            if not r:
-                # create database
+            if not r: # create database if it doesnt exist
                 cursor.execute("CREATE DATABASE {};".format(DATABASE_NAME))
-            
+            cursor.close()
+            connection.close()
             connection_params['database'] = DATABASE_NAME
-            connection = dbmodule.connect(**connection_params)
+            connection = dbmodule.connect(**connection_params) # reconnect in new database context
             autocommit(connection)
+        else: # sqlite is more simple, there is only one database per file, you can just connect direct without creating
+            connection = dbmodule.connect(args.database_filename, check_same_thread=False)
+            connection.isolation_level = None # autocommit
 
-            cursor = connection.cursor()
-            cursor.execute(list_tables_query)
-            existing_tables = [a[0] for a in cursor.fetchall()]
-            # create tables
-            for table in [a for a in DATABASE_TABLES if a['table_name'] not in existing_tables]:
-                inner = ', '.join([' '.join([ (lambda x : x if isinstance(x, str) else 'NULL' if x else 'NOT NULL')(a[b]) for b in ['name', 'datatype', 'nullable'] ]) for a in table['columns'] ])
-                cursor.execute('CREATE TABLE {} ({});'.format(table['table_name'], inner))
-                # insert data into table 
-                for data in DATABASE_CONTENTS[table['table_name']]:
-                    columns = ', '.join([a['name'] for a in table['columns']])
-                    values = ', '.join([(lambda x: str(x) if isinstance(x, int) else "'{}'".format(x.replace("'", "\\'")))(a) for a in data])
-                    cursor.execute('INSERT INTO {} ({}) VALUES ({});'.format(table['table_name'], columns, values))
-            database = True
-        except Exception as e:
-            print(e)
-            sys.exit(1)
-
-
-
-    if database:
-        app.add_url_rule('/listservices','listservices', listservices)
+        cursor = connection.cursor()
+        cursor.execute(list_tables_query)
+        existing_tables = [a[0] for a in cursor.fetchall()]
+        for table in [a for a in DATABASE_TABLES if a['table_name'] not in existing_tables]: # create missing tables
+            inner = ', '.join([' '.join([ (lambda x : x if isinstance(x, str) else 'NULL' if x else 'NOT NULL')(a[b]) for b in ['name', 'datatype', 'nullable'] ]) for a in table['columns'] ])
+            cursor.execute('CREATE TABLE {} ({});'.format(table['table_name'], inner))
+            for data in DATABASE_CONTENTS[table['table_name']]: # insert data into table 
+                columns = ', '.join([a['name'] for a in table['columns']])
+                values = ', '.join([(lambda x: str(x) if isinstance(x, int) else "'{}'".format(x.replace("'", "\\'")))(a) for a in data])
+                cursor.execute('INSERT INTO {} ({}) VALUES ({});'.format(table['table_name'], columns, values))
+    except Exception as e:
+        print('An error ocured during database connection/setup: '.format(e))
+        sys.exit(1)
     
     app.run(host=args.address, port=args.port)
-
