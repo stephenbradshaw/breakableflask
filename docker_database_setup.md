@@ -51,9 +51,9 @@ You can use Docker to create a suitable MSSQL server like so, using the official
 
     docker run -d --name mssql -e 'ACCEPT_EULA=Y' -e 'SA_PASSWORD=Password1!' -p 127.0.0.1:1433:1433 mcr.microsoft.com/mssql/server:2019-latest
 
-You can now connect to the server using the credentials `sa:Password1!` on port `1433` at `127.0.0.1`. There is a minimum complexity requirement for the SA password in this container, which the example password above meets. Make sure if you vary this when you run your container that your password meets this too, otherwise the container will refuse to run (you can see if its running using `docker ps`). 
+You can now connect to the server using the credentials `sa:Password1!` on port `1433` at `127.0.0.1`. There is a minimum complexity requirement for the SA password in this container, which the example password above meets. Make sure if you change this that your password meets the standard too, otherwise the container will refuse to run (you can see if its running using `docker ps`). 
 
-You can check the output of `docker logs mssql` if the container fails to see if password complexity is the reason.
+If the container fails to run, you can check the output of `docker logs mssql` to see if password complexity is the reason. The complexity standard you have to meet is also referenced here.
 
 After the container has been successfully launched once, you can use the following command to start it up again (e.g. if you reboot or otherwise kill the container).
 
