@@ -38,7 +38,7 @@ Once in the mysql shell, enter the following commands to change the root passwor
     GRANT ALL ON *.* TO 'mysql'@'%';
     QUIT
 
-The server is now ready to use with your new credentials and is contactable using the new credentials on port `3306` at `127.0.0.1`.
+The server is now ready to use with your new credentials and is contactable on port `3306` at `127.0.0.1`.
 
 After the container has been successfully launched once, you can use the following command to start it up again (e.g. if you reboot or otherwise kill the container).
 
