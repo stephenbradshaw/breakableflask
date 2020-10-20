@@ -60,6 +60,42 @@ After the container has been successfully launched once, you can use the followi
     docker start mssql
 
 
+## Setup an Oracle database server
+
+As with all things Oracle, running the software is just a little bit harder and more annoying. The following process involves building your own Docker image, and is based on instructions from [here](https://www.petefreitag.com/item/886.cfm).
+
+1. Download Oracle database express edition version 18c for Linux from [here](https://www.oracle.com/database/technologies/xe-downloads.html).
+
+2. Clone the Oracle docker images repository from [here](https://github.com/oracle/docker-images)
+
+    git clone https://github.com/oracle/docker-images.git
+
+3. Change to the following folder inside the cloned folder
+
+    cd ./OracleDatabase/SingleInstance/dockerfiles
+
+4. Copy the downloaded Oracle database installer into the 18.4.0 subfolder
+
+    cp ~/Downloads/oracle-database-xe-18c-1.0-1.x86_64.rpm ./18.4.0
+
+5. Build the Docker image.  Be patient with this, it takes forever and appears to freeze on a regular basis just after telling you something is `Complete!`. Just wait it out.
+    
+    ./buildDockerImage.sh -x -v 18.4.0
+
+
+Now that thats done, you can launch a container in a manner similar to the other examples.  
+
+    docker run -d --name oracle -e 'ORACLE_PWD=password' -p 127.0.0.1:1521:1521 oracle/database:18.4.0-xe
+
+This will take a while to start up, longer than the other database types. Monitor its progress by using `docker ps` and/or `docker logs oracle`.
+
+Once its (finally) done, you can connect to the server using the credentials `system:password` on port `1521` at `127.0.0.1`.  (The password you specify is set for the `SYS`, `SYSTEM` and `PDBADMIN` users).
+
+After the container has been successfully launched once, you can use the following command to start it up again (e.g. if you reboot or otherwise kill the container).
+
+    docker start oracle
+
+
 ## Stopping and deleting Docker images
 
 To stop a running Docker instance find the container id by checking the output of `docker ps`, and stop like so:

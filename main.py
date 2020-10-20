@@ -289,7 +289,7 @@ def listservices():
         where = " WHERE {} = '{}'".format(param, category)
     
     try:
-        cursor.execute('SELECT * from public_stuff{};'.format(where))
+        cursor.execute(query_build('SELECT * from public_stuff{}'.format(where)))
         results = cursor.fetchall()
     except Exception as e:
         return str(e)
@@ -324,9 +324,12 @@ if __name__ == "__main__":
     parser.add_argument('--database_host', type=str, help='Database hostname. Default: None', default=None)
     parser.add_argument('--database_port', type=int, help='Database port. Default: None', default=None)
     parser.add_argument('--database_filename', type=str, help='Database filename (sqlite only). Default: :memory:', default=':memory:')
+    parser.add_argument('--oracle_lib_dir', type=str, help='Location of Oracle client libraries, needed for Oracle database connectivity', default='/opt/local/lib/oracle')
 
 
     args = parser.parse_args()
+
+    query_build = lambda x: x if args.database_type == 'oracle' else x + ';' # why must you be this way Oracle?
 
     if args.database_type in ['mysql', 'mssql']:
         autocommit = lambda x : x.autocommit(True)
@@ -348,11 +351,12 @@ if __name__ == "__main__":
         import sqlite3 as dbmodule
         list_tables_query = "SELECT name FROM sqlite_master WHERE type ='table' AND name NOT LIKE 'sqlite_%';"
     if args.database_type in ['oracle']:
-        print('Support for these database types is planned but not yet implemented.')
-        sys.exit(1)
+        import cx_Oracle as dbmodule
+        dbmodule.init_oracle_client(args.oracle_lib_dir)
+        list_tables_query = 'SELECT table_name FROM all_tables'
 
     try:
-        if args.database_type != 'sqlite':
+        if args.database_type not in ['sqlite', 'oracle']:
             connection_params = {a.replace('database_', ''): getattr(args, a) for a in dir(args) if a in ['database_user', 'database_host', 'database_password', 'database_port']}
             connection = dbmodule.connect(**connection_params)
             autocommit(connection)
@@ -366,22 +370,30 @@ if __name__ == "__main__":
             connection_params['database'] = DATABASE_NAME
             connection = dbmodule.connect(**connection_params) # reconnect in new database context
             autocommit(connection)
-        else: # sqlite is more simple, there is only one database per file, you can just connect direct without creating
+        elif args.database_type == 'oracle': 
+            connection_params = {a.replace('database_', ''): getattr(args, a) for a in dir(args) if a in ['database_user', 'database_password']}
+            connection_params['dsn'] = '{}:{}'.format(args.database_host, args.database_port)
+            connection = dbmodule.connect(**connection_params)
+            connection.autocommit = 1
+        elif args.database_type == 'sqlite':
             connection = dbmodule.connect(args.database_filename, check_same_thread=False)
             connection.isolation_level = None # autocommit
+        else: # shouldnt happen
+            print('Invalid database type selected: {}'.format(args.database_type))
+            sys.exit(1)
 
         cursor = connection.cursor()
         cursor.execute(list_tables_query)
-        existing_tables = [a[0] for a in cursor.fetchall()]
-        for table in [a for a in DATABASE_TABLES if a['table_name'] not in existing_tables]: # create missing tables
+        existing_tables = [a[0].lower() for a in cursor.fetchall()]
+        for table in [a for a in DATABASE_TABLES if a['table_name'].lower() not in existing_tables]: # create missing tables
             inner = ', '.join([' '.join([ (lambda x : x if isinstance(x, str) else 'NULL' if x else 'NOT NULL')(a[b]) for b in ['name', 'datatype', 'nullable'] ]) for a in table['columns'] ])
-            cursor.execute('CREATE TABLE {} ({});'.format(table['table_name'], inner))
+            cursor.execute(query_build('CREATE TABLE {} ({})'.format(table['table_name'].lower(), inner)))
             for data in DATABASE_CONTENTS[table['table_name']]: # insert data into table 
                 columns = ', '.join([a['name'] for a in table['columns']])
                 values = ', '.join([(lambda x: str(x) if isinstance(x, int) else "'{}'".format(x.replace("'", "\\'")))(a) for a in data])
-                cursor.execute('INSERT INTO {} ({}) VALUES ({});'.format(table['table_name'], columns, values))
+                cursor.execute(query_build('INSERT INTO {} ({}) VALUES ({})'.format(table['table_name'], columns, values)))
     except Exception as e:
-        print('An error ocured during database connection/setup: '.format(e))
+        print('An error ocured during database connection/setup: {}'.format(e))
         sys.exit(1)
     
     app.run(host=args.address, port=args.port)
