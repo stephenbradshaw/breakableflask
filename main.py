@@ -350,7 +350,7 @@ if __name__ == "__main__":
     if args.database_type == 'sqlite':
         import sqlite3 as dbmodule
         list_tables_query = "SELECT name FROM sqlite_master WHERE type ='table' AND name NOT LIKE 'sqlite_%';"
-    if args.database_type in ['oracle']:
+    if args.database_type == 'oracle':
         import cx_Oracle as dbmodule
         dbmodule.init_oracle_client(args.oracle_lib_dir)
         list_tables_query = 'SELECT table_name FROM all_tables'
