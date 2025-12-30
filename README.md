@@ -15,6 +15,7 @@ At the moment, the following vulnerabilities are present:
 * Padding oracle
 * Server side template injection
 * SQL injection
+* JWT none algorithm and algorithm confusion
 
 
 New vulnerabilities may be added from time to time as I have need of them.

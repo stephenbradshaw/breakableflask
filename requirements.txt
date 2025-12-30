@@ -1,8 +1,8 @@
 click>=7.1.2
-Flask>=1.1.2
-itsdangerous>=1.1.0
-Jinja2>=2.11.2
-lxml>=4.5.2
-MarkupSafe>=1.1.1
-pycryptodome>=3.9.8
-Werkzeug>=1.0.1
+Flask>=3.1.2
+itsdangerous>=2.2.0
+Jinja2>=3.1.6
+lxml>=6.0.2
+MarkupSafe>=3.0.3
+pycryptodome>=3.23.0
+Werkzeug>=3.1.3

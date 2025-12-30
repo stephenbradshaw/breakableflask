@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
+import hmac
+import hashlib
+import jwt
+import datetime
+import json
 import os
 import pickle
-from base64 import b64decode,b64encode
+from base64 import b64decode,b64encode, urlsafe_b64decode, urlsafe_b64encode
 from binascii import hexlify, unhexlify
 from os import popen
 from lxml import etree
 import html
 from Crypto.Cipher import AES
 from Crypto import Random
+from Crypto.PublicKey import RSA
 import argparse
 import sys
 
@@ -18,9 +24,17 @@ from flask import Flask, request, make_response, render_template_string
 KEY=Random.new().read(32) # 256 bit key for extra security!!!
 BLOCKSIZE=AES.block_size
 ADMIN_SECRET=Random.new().read(32) # need to keep this secret
-APP_NAME = 'My First App'
+APP_NAME = 'My_First_App'
 APP_VERSION = '0.1 pre pre pre alpha'
 APP_PHILOSOPHY = 'If at first you dont succeed, try, try again!'
+EXPIRY_WINDOW = 3600
+KEYID='1'
+ALLOWED_ALGORITHMS = ['RS256', 'HS256', 'None']
+ALLOWED_AUDIENCE = APP_NAME
+ALLOWED_USER = 'guest'
+AUTH_COOKIE='authentication'
+ADMIN_USER = 'admin'
+
 
 CONFIG = {
     'encrypto_key' : b64encode(KEY),
@@ -67,6 +81,62 @@ DATABASE_CONTENTS = {
     ]
 }
 
+
+# pkcs is 1 or 8
+def generate_private_key(keysize: int=2048, export: bool=True, pem: bool=True, pkcs: int=8):
+    key = RSA.generate(keysize)
+    if export:
+        return key.export_key(format='PEM' if pem else 'DER', pkcs=pkcs)
+    else:
+        return key
+
+
+def public_key_from_private(privatekey: RSA.RsaKey, export: bool=True, pem: bool=True, pkcs: int=8):
+    pub = privatekey.public_key()
+    if export:
+        return pub.export_key(format='PEM' if pem else 'DER', pkcs=pkcs)
+    else:
+        return pub
+
+
+# works for private or public
+def import_key(keydata: bytes):
+    return RSA.import_key(keydata)
+
+
+if os.getenv('PRIVATE_KEY_FILE') and os.getenv('PUBLIC_KEY_FILE'):
+    SIGN_KEY = open(os.getenv('PRIVATE_KEY_FILE'), 'rb').read() 
+    VERIFY_KEY = open(os.getenv('PUBLIC_KEY_FILE'), 'rb').read()
+else:
+    import tempfile
+    temp_dir = tempfile.gettempdir()
+    private_key_file = os.path.join(temp_dir, 'private.pem')
+    public_key_file = os.path.join(temp_dir, 'public.pem')
+
+    private = generate_private_key()
+    public = public_key_from_private(import_key(private))
+    SIGN_KEY = private
+    VERIFY_KEY = public
+    open(private_key_file, 'wb').write(private)
+    open(public_key_file, 'wb').write(public)
+    print('Environment variables "PRIVATE_KEY_FILE" and "PUBLIC_KEY_FILE" not set, generating temporary keys.')
+    print(f'Private key is: {private_key_file}')
+    print(f'Public key is: {public_key_file}')
+
+
+def ceil(a, b):
+    return a // b + (a % b > 0)
+
+
+def bytes_to_integer(data):
+    return int.from_bytes(data, byteorder="big")
+
+
+def integer_to_bytes(number):   
+    bl = ceil(number.bit_length(), 8) # get number of bytes
+    return number.to_bytes(bl, byteorder="big")
+
+
 def unpad(value, bs=BLOCKSIZE):
     #pv = ord(value[-1])
     pv = value[-1]
@@ -102,6 +172,127 @@ def rp(command):
     return popen(command).read()
 
 
+
+
+
+
+def create_token_rsa(key: bytes, subject: str, keyid: str = KEYID, exp_window: int = EXPIRY_WINDOW, audience: str = ALLOWED_AUDIENCE, issuer: str = APP_NAME, it = None) -> str:
+    '''Generate RS256 authentication tokens'''
+    if not it:
+        t = int(datetime.datetime.timestamp(datetime.datetime.now(datetime.timezone.utc)))
+    else:
+        t = it
+    iat = t
+    iat = t
+    nbf = t
+    exp = iat + exp_window
+    sd = {'exp' : exp, 'iat': iat, 'nbf' : nbf, 'iss': issuer, 'sub': subject, 'aud': audience}
+    return jwt.encode(sd, key, algorithm='RS256', headers={'kid': keyid})
+
+
+def create_token_hs256_manual(key, subject: str, keyid: str = KEYID, exp_window: int = EXPIRY_WINDOW, audience: str = ALLOWED_AUDIENCE,  issuer: str = APP_NAME, it = None) -> str:
+    '''Manual generation of HS256 token'''
+    jdump = lambda x: json.dumps(x, separators=(',',':')).encode()
+    benc = lambda x : urlsafe_b64encode(x).rstrip(b'=')
+    if not it:
+        t = int(datetime.datetime.timestamp(datetime.datetime.now(datetime.timezone.utc)))
+    else:
+        t = it
+    iat = t
+    nbf = t
+    exp = iat + exp_window
+    hd = {'alg' : 'HS256', 'kid' : keyid, 'typ' : 'JWT'}
+    sd = {'exp' : exp, 'iat': iat, 'nbf' : nbf, 'iss': issuer, 'sub': subject, 'aud': audience}
+    msg = benc(jdump(hd)) + b'.' + benc(jdump(sd))
+    sig = benc(hmac.new(key, msg, hashlib.sha256).digest()).decode('utf8')
+    return '{}.{}'.format(msg.decode('utf8'), sig)
+
+
+def verify_token_rsa(token: str, public_key: bytes, exp_window: int = EXPIRY_WINDOW, audience: str = ALLOWED_AUDIENCE, issuer: str = APP_NAME) -> dict:
+    '''Verify RSA token'''
+    return jwt.decode(token, public_key, algorithms=['RS256'], audience=audience, issuer=issuer)
+
+
+def verify_token_hs256(token: str, key: bytes, audience: str = ALLOWED_AUDIENCE, issuer: str = APP_NAME):
+    '''Manual verification of HS256'''
+    benc = lambda x : urlsafe_b64encode(x).rstrip(b'=')
+    parts = token.split('.')
+    if len(parts) != 3:
+        raise Exception('Invalid token format')
+    headers = json.loads(urlsafe_b64decode(parts[0] + '==').decode('utf8'))
+    if headers.get('alg') != 'HS256':
+        raise Exception('Invalid algorithm')
+    sig = benc(hmac.new(key,'.'.join(parts[0:2]).encode(), hashlib.sha256).digest()).decode('utf8')
+    if sig == parts[-1]:
+        claims = json.loads(urlsafe_b64decode(parts[1] + '==').decode('utf8'))
+        if not claims.get('aud') == audience:
+            raise Exception('Invalid audience {}'.format(claims.get('aud')))
+        if not claims.get('iss') == issuer:
+            raise Exception('Invalid issuer')
+        t = int(datetime.datetime.timestamp(datetime.datetime.now(datetime.timezone.utc)))
+        if not((t > claims.get('iat')) and (t > claims.get('nbf'))):
+            raise Exception('Token issued in future')
+        if not (claims.get('exp') > t):
+            raise Exception('Token expired')
+        return claims
+    else: 
+        raise Exception('Invalid signature')
+
+
+def verify_token_none(token: str, key: bytes, audience: str = ALLOWED_AUDIENCE, issuer: str = APP_NAME):
+    '''Manual verification of None ;)'''
+    parts = token.split('.')
+    if len(parts) != 3:
+        raise Exception('Invalid token format')
+    headers = json.loads(urlsafe_b64decode(parts[0] + '==').decode('utf8'))
+    if headers.get('alg') != 'None':
+        raise Exception('Invalid algorithm')
+    if parts[2] == '':
+        claims = json.loads(urlsafe_b64decode(parts[1] + '==').decode('utf8'))
+        if not claims.get('aud') == audience:
+            raise Exception('Invalid audience {}'.format(claims.get('aud')))
+        if not claims.get('iss') == issuer:
+            raise Exception('Invalid issuer')
+        t = int(datetime.datetime.timestamp(datetime.datetime.now(datetime.timezone.utc)))
+        if not((t > claims.get('iat')) and (t > claims.get('nbf'))):
+            raise Exception('Token issued in future')
+        if not (claims.get('exp') > t):
+            raise Exception('Token expired')
+        return claims
+    else:
+        raise Exception('Invalid signature')
+
+
+
+def verify_token(token: str, verify_key: bytes, algorithms: list = ALLOWED_ALGORITHMS, exp_window: int = EXPIRY_WINDOW, audience: str = ALLOWED_AUDIENCE, issuer: str = APP_NAME):
+    '''Verify a token'''
+    headers = jwt.get_unverified_header(token)
+    if headers.get('alg') not in algorithms:
+        raise Exception('Invalid algorithm specified')
+    if headers.get('alg') == 'RS256':
+        return verify_token_rsa(token, verify_key)
+    if headers.get('alg') == 'HS256':
+        return verify_token_hs256(token, verify_key)
+    if headers.get('alg') == 'None':
+        return verify_token_none(token, verify_key)
+    raise Exception('Unknown error in token validation')
+
+
+
+
+def create_token_hs256(key, keyid, exp_window=3600, audience='theia-web-shell', subject='offensive-security', issuer='custom-auth', it = None):
+    '''Helper function to generate authentication tokens'''
+    if not it:
+        t = int(datetime.datetime.timestamp(datetime.datetime.now(datetime.timezone.utc)))
+    else:
+        t = it
+    iat = t
+    nbf = t
+    exp = iat + exp_window
+    sd = {'exp' : exp, 'iat': iat, 'nbf' : nbf, 'iss': issuer, 'sub': subject, 'aud': audience}
+    return jwt.encode(sd, key, algorithm='HS256', headers={'kid': keyid})
+
+
 app = Flask(__name__)
 
 # Main index
@@ -119,6 +310,7 @@ def index():
         <a href="/config">View some config items</a><br>
         <a href="/sayhi">Receive a personalised greeting</a><br>
         <a href="/listservices">List our products and services</a><br>
+        <a href="/user">Log on using a jwt</a><br>
     </body>
     </html>
     """
@@ -310,7 +502,77 @@ def listservices():
         </body>
     </html>
     """
+
     
+
+# 8. JWT user logion
+# Do it the hard way sans jwks... https://blog.silentsignal.eu/2021/02/08/abusing-jwt-public-keys-without-the-public-key/
+@app.route('/user', methods = ['GET'])
+def jwtmain():
+    base = '<!DOCTYPE html>\n<html><body><h1>Flask app</h1>CONTENT</body></html>'
+    if AUTH_COOKIE in request.cookies:
+        try:
+            token = request.cookies[AUTH_COOKIE]
+            claims = verify_token(token, VERIFY_KEY)
+            if not 'sub' in claims:
+                raise Exception('No sub in token claims')
+            user = claims.get('sub')
+            if user == ADMIN_USER:
+                content = '<p><b>Admin achieved!</b></p>'
+            else:
+                content = f'<p><b>System</b>: <font style="color: red">You are user "{user}", you need to be user "{ADMIN_USER}"</font></p><p><a href="/user/jwks">Jwks available here.</a></p>'
+            return make_response(base.replace('CONTENT', content))
+        except Exception as e:
+            return make_response(base.replace('CONTENT', '<p>Error in reading token: ' + str(e) + '</p><p><a href="/user/login">Logon again.</a></p>'))
+    else:
+        return make_response(base.replace('CONTENT', '<p>You are not logged on!</p><p><a href="/user/login">Go here to authenticate.</a></p>'))
+
+
+@app.route('/user/jwks', methods = ['GET'])
+def jwks():
+    pub = import_key(VERIFY_KEY)
+    n_val = urlsafe_b64encode(integer_to_bytes(pub.n)).decode().rstrip('=')
+    e_val = urlsafe_b64encode(integer_to_bytes(pub.n)).decode().rstrip('=')
+    return json.dumps({'keys': [ {'kty': 'RSA', 'alg': 'RS256', 'kid': KEYID, 'use': 'sig', 'n': n_val, 'e': e_val} ]}, indent=4)
+
+
+
+@app.route('/user/login', methods = ['POST', 'GET'])
+def login():
+    
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        if (username == ALLOWED_USER and password == ALLOWED_USER):
+            token = create_token_rsa(SIGN_KEY, ALLOWED_USER)
+            resp = make_response('<!DOCTYPE html>\n<html><body><p>Logged in, welcome {}!</p><br><a href="/user">Now go home.</a></body></html>'.format(ALLOWED_USER))
+            exp = int(datetime.datetime.timestamp(datetime.datetime.now(datetime.timezone.utc))) + EXPIRY_WINDOW
+            resp.set_cookie(AUTH_COOKIE, token, expires=exp)
+            return resp
+        else:
+            return make_response('<!DOCTYPE html>\n<html><body><p>Login failed!</p><br><a href="/user/login">Now try and logon again.</a></body></html>')
+
+    form = '''
+    <!DOCTYPE html>
+    <html>
+       <body>
+        <h1>Login</h1>
+          <p>Provide credentials (use ''' + '{}:{}'.format(ALLOWED_USER, ALLOWED_USER) + ''' if you dont have an account)</p>
+          <form action = "/user/login" method = "POST">
+            <label>Username</label>
+            <input type = 'text' name = 'username'/><br>
+            <label>Password</label>
+            <input type = 'password' name = 'password'/><br>
+            <input type = 'submit' value = 'Login'/>
+          </form>
+       </body>
+    </html>
+    '''
+
+    return make_response(form)
+
+
+
 
 if __name__ == "__main__":
 
