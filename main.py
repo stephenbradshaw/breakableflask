@@ -505,7 +505,7 @@ def listservices():
 
     
 
-# 8. JWT user logion
+# 8. JWT user logon
 # Do it the hard way sans jwks... https://blog.silentsignal.eu/2021/02/08/abusing-jwt-public-keys-without-the-public-key/
 @app.route('/user', methods = ['GET'])
 def jwtmain():
@@ -532,7 +532,7 @@ def jwtmain():
 def jwks():
     pub = import_key(VERIFY_KEY)
     n_val = urlsafe_b64encode(integer_to_bytes(pub.n)).decode().rstrip('=')
-    e_val = urlsafe_b64encode(integer_to_bytes(pub.n)).decode().rstrip('=')
+    e_val = urlsafe_b64encode(integer_to_bytes(pub.e)).decode().rstrip('=')
     return json.dumps({'keys': [ {'kty': 'RSA', 'alg': 'RS256', 'kid': KEYID, 'use': 'sig', 'n': n_val, 'e': e_val} ]}, indent=4)
 
 
