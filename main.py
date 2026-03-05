@@ -16,6 +16,7 @@ from Crypto import Random
 from Crypto.PublicKey import RSA
 import argparse
 import sys
+import argparse
 
 
 from flask import Flask, request, make_response, render_template_string
@@ -296,8 +297,8 @@ def create_token_hs256(key, keyid, exp_window=3600, audience='theia-web-shell', 
 app = Flask(__name__)
 
 # Main index
-@app.route('/')
-def index():
+@app.route('/hello', methods = ['GET'])
+def hello():
     return """
     <html>
     <head><title>Vulnerable Flask App: """ + CONFIG['app_name'] +"""</title></head>
