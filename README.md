@@ -16,6 +16,7 @@ At the moment, the following vulnerabilities are present:
 * Server side template injection
 * SQL injection
 * JWT none algorithm and algorithm confusion
+* Path traversal / local file inclusion
 
 
 New vulnerabilities may be added from time to time as I have need of them.

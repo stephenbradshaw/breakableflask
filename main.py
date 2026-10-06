@@ -34,6 +34,7 @@ ALLOWED_AUDIENCE = APP_NAME
 ALLOWED_USER = 'guest'
 AUTH_COOKIE='authentication'
 ADMIN_USER = 'admin'
+FILE_PATH = 'files'
 
 
 CONFIG = {
@@ -311,6 +312,7 @@ def index():
         <a href="/sayhi">Receive a personalised greeting</a><br>
         <a href="/listservices">List our products and services</a><br>
         <a href="/user">Log on using a jwt</a><br>
+        <a href="/file">View a file</a><br>
     </body>
     </html>
     """
@@ -573,6 +575,36 @@ def login():
 
 
 
+# 9. File viewer
+@app.route('/file', methods = ['POST', 'GET'])
+def file():
+    filename = None
+    contents = None
+    if request.method == 'POST':
+        filename = request.form['filename']
+    else:
+        filename = request.args.get('filename')
+    if filename:
+        try:
+            f = open(os.path.join(FILE_PATH, filename), 'r')
+            contents = f.read()
+            f.close()
+        except Exception as e:
+            return str(e)
+    fileout = 'File contents:\n<br><pre>\n' + contents + '\n</pre>' if contents else ''
+    return """
+    <html>
+       <body>""" + fileout + """
+          <form action = "/file" method = "POST">
+             <p><h3>Enter filename to view</h3></p>
+             <p><input type = 'text' name = 'filename'/></p>
+             <p><input type = 'submit' value = 'View File'/></p>
+          </form>
+       </body>
+    </html>
+    """
+
+
 
 if __name__ == "__main__":
 
@@ -657,5 +689,9 @@ if __name__ == "__main__":
     except Exception as e:
         print('An error ocured during database connection/setup: {}'.format(e))
         sys.exit(1)
-    
+
+    if not os.path.isdir(FILE_PATH): # create directory with sample file for the file viewer
+        os.mkdir(FILE_PATH)
+        open(os.path.join(FILE_PATH, 'readme.txt'), 'w').write('Sample file for viewing with the file viewer. Nothing sensitive in here!\n')
+
     app.run(host=args.address, port=args.port)

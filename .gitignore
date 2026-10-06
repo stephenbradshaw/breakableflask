@@ -1,2 +1,5 @@
 # Dont upload temporary Markdown writeups 
 .writeup.md
+
+# Runtime sample files directory for the file viewer
+files/
